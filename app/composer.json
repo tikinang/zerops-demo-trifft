@@ -1,0 +1,8 @@
+{
+    "name": "demo/notifications-publisher",
+    "description": "Simple PHP app to publish notifications to NATS",
+    "require": {
+        "php": "^8.4",
+        "basis-company/nats": "^1.1.2"
+    }
+}

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:nats-io.github.io)",
+      "WebSearch"
+    ]
+  }
+}

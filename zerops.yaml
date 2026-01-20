@@ -1,0 +1,42 @@
+zerops:
+  - setup: app
+    build:
+      os: ubuntu
+      base: php@8.4
+      buildCommands:
+        - cd app && composer install --no-dev --optimize-autoloader
+      deployFiles: ./app/~
+      cache:
+        - composer.lock
+        - vendor
+    run:
+      os: ubuntu
+      base: php-nginx@8.4
+      envVariables:
+        NATS_URL: ${pubsub_connectionString}
+
+  - setup: worker
+    build:
+      os: ubuntu
+      base: dotnet@9
+      buildCommands:
+        - |
+          cd worker
+          dotnet restore
+          dotnet publish -c Release -o out
+        - |
+          cd migrate
+          dotnet restore
+          dotnet publish -c Release -o out
+      deployFiles:
+        - ./worker/out/~
+        - ./migrate/out/
+    run:
+      os: ubuntu
+      base: dotnet@9
+      start: dotnet Worker.dll
+      initCommands:
+        - zsc execOnce migrate -- dotnet ./migrate/out/Migrate.dll
+      envVariables:
+        NATS_URL: ${pubsub_connectionString}
+        DB_CONNECTION_STRING: Server=${db_hostname};Database=${db_dbName};User=${db_user};Password=${db_password};
