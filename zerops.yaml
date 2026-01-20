@@ -1,4 +1,88 @@
 zerops:
+  - setup: api
+    build:
+      os: ubuntu
+      base: php@8.4 # Zaklad PHP a basic extensions je already included v tomto base imagi (velmi podobne jako u phpdockerio base imagů).
+      #      prepareCommands:
+      #        # TODO: Instalace PHP extensions a zavislosti (grpc, protobuf, imagick w/ heic, sqlsrv)
+      #        - sudo apt-get update
+      #        - sudo apt-get install -y ...
+      #        - sudo pecl install grpc protobuf imagick
+      prepareCommands:
+        # Prerequisites
+        - sudo apt-get update
+        - sudo apt-get install -y build-essential autoconf libtool zlib1g-dev
+        
+        # HEIC/ImageMagick dependencies
+        - sudo apt-get install -y libheif-dev libde265-dev libaom-dev libwebp-dev libjpeg-dev libpng-dev libtiff-dev libgif-dev libraw-dev libopenjp2-7-dev libltdl-dev libmagickwand-dev
+        
+        # Microsoft ODBC driver for SQL Server
+        - curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+        - curl -fsSL https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+        - sudo apt-get update
+        - sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+        
+        # PHP extensions via PECL
+        - sudo apt-get install -y php-pear php8.4-dev
+        - sudo pecl install grpc # protobuf imagick sqlsrv pdo_sqlsrv
+        
+        # Enable extensions
+        - echo "extension=grpc.so" | sudo tee /etc/php/8.4/mods-available/grpc.ini
+#        - echo "extension=protobuf.so" | sudo tee /etc/php/8.4/mods-available/protobuf.ini
+#        - echo "extension=imagick.so" | sudo tee /etc/php/8.4/mods-available/imagick.ini
+#        - echo "extension=sqlsrv.so" | sudo tee /etc/php/8.4/mods-available/sqlsrv.ini
+#        - echo "extension=pdo_sqlsrv.so" | sudo tee /etc/php/8.4/mods-available/pdo_sqlsrv.ini
+        - sudo phpenmod # grpc protobuf imagick sqlsrv pdo_sqlsrv
+      buildCommands:
+        - cd app && composer install --no-dev --optimize-autoloader
+      deployFiles: ./app/~
+      # Cely tento build kontejner se muze zacachovat, vcetne napr. vendor slozky.
+      # Nasledne buildy jsou tudiz pouze incrementalni a muzou byt velmi svizne
+      # (mam zkusenosit s Go, kde je vysledny build artifact hotovy v ramci sekund).
+      cache:
+        - composer.lock
+        - vendor
+    run:
+      os: ubuntu
+      base: php-nginx@8.4
+      # Vysledek po prepareCommands se cely ulozi, podobne jako docker image a nastartuje take v ramci vterin novy.
+      # Rozdil oproti Dockeru je, ze build artifact (PHP soubory, apod.) se rozbali az dovnitr tohoto image po jeho nastartovani.
+      # !!! Aka vysledny runtime je run.base + run.prepareCommands + build.deployFiles !!!
+      prepareCommands:
+        # Prerequisites
+        - sudo apt-get update
+        - sudo apt-get install -y build-essential autoconf libtool zlib1g-dev
+        
+        # HEIC/ImageMagick dependencies
+        - sudo apt-get install -y libheif-dev libde265-dev libaom-dev libwebp-dev libjpeg-dev libpng-dev libtiff-dev libgif-dev libraw-dev libopenjp2-7-dev libltdl-dev libmagickwand-dev
+        
+        # Microsoft ODBC driver for SQL Server
+        - curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+        - curl -fsSL https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+        - sudo apt-get update
+        - sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+        
+        # PHP extensions via PECL
+        - sudo apt-get install -y php-pear php8.4-dev
+        - sudo pecl install grpc # protobuf imagick sqlsrv pdo_sqlsrv
+        
+        # Enable extensions
+        - echo "extension=grpc.so" | sudo tee /etc/php/8.4/mods-available/grpc.ini
+#        - echo "extension=protobuf.so" | sudo tee /etc/php/8.4/mods-available/protobuf.ini
+#        - echo "extension=imagick.so" | sudo tee /etc/php/8.4/mods-available/imagick.ini
+#        - echo "extension=sqlsrv.so" | sudo tee /etc/php/8.4/mods-available/sqlsrv.ini
+#        - echo "extension=pdo_sqlsrv.so" | sudo tee /etc/php/8.4/mods-available/pdo_sqlsrv.ini
+        - sudo phpenmod grpc # protobuf imagick sqlsrv pdo_sqlsrv
+      #      initCommands:
+      #        # TODO: Migrace, cache warming...
+      #        - php bin/console cache:clear --no-warmup
+      envVariables:
+        NATS_URL: ${pubsub_connectionString}
+      healthCheck:
+        httpGet:
+          port: 80
+          path: /health
+
   - setup: app
     build:
       os: ubuntu
@@ -36,7 +120,7 @@ zerops:
       base: dotnet@9
       start: dotnet Worker.dll
       initCommands:
-        - zsc execOnce migrate -- dotnet ./migrate/out/Migrate.dll
+        - zsc execOnce ${ZEROPS_appVersionId} -- dotnet ./migrate/out/Migrate.dll
       envVariables:
         NATS_URL: ${pubsub_connectionString}
         DB_CONNECTION_STRING: Server=${db_hostname};Database=${db_dbName};User=${db_user};Password=${db_password};

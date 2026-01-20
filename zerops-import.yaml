@@ -1,6 +1,3 @@
-# Trifft x Zerops Demo
-
-```yaml
 project:
   name: Trifft Demo
 services:
@@ -28,4 +25,3 @@ services:
     buildFromGit: https://github.com/tikinang/zerops-demo-trifft
     zeropsSetup: app
     enableSubdomainAccess: true
-```
